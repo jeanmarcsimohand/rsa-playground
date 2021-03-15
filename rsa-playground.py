@@ -44,6 +44,7 @@
 import multiprocessing
 import random
 import math
+import sys
 from binascii import hexlify, unhexlify
 from typing import Union
 
@@ -288,11 +289,11 @@ class Rsa:
         if self.exponent < 1 or self.exponent >= lambda_n:
             self.exponent = 2
 
+        # ensure the pub exponent and lambda are coprime
         while math.gcd(self.exponent, lambda_n) != 1:
-            # instead of returning an error, I search for the next
+            # instead of returning an error, I try with the next
             # valid public exponent
             self.exponent += 1
-            print("Trying with next exponent {}".format(str(self.exponent)))
             if self.exponent >= lambda_n:
                 raise ValueError("Unable to find a matching exponent")
 
@@ -407,7 +408,11 @@ class Rsa:
 
 if __name__ == "__main__":
     rsa = Rsa(public_exponent=65537, bits=1024)
-    rsa.keygen()
+    try:
+        rsa.keygen()
+    except Exception as e:
+        print("Unable to generate a key pair ({}".format(str(e)))
+        sys.exit(1)
 
     modulus, exponent = rsa.get_pubkey()
     _, priv = rsa.get_privkey()
@@ -422,11 +427,21 @@ if __name__ == "__main__":
                 "abcdefghijklmnopqrstuvwxyz123456-abcdefghijklmnopqrstuvwxyz12345"
 
     # encrypt the message
-    ciphered = rsa.encrypt(message=test_text, padding=rsa.PKCS7_PADDING)
+    try:
+        ciphered = rsa.encrypt(message=test_text, padding=rsa.PKCS7_PADDING)
+    except Exception as e:
+        print("Unable to encrypt the input buffer ({})".format(str(e)))
+        sys.exit(2)
+
     print("Ciphered", hexlify(ciphered).decode().upper())
 
     # decrypt the message
-    plaintext = rsa.decrypt(message=ciphered, padding=rsa.PKCS7_PADDING)
+    try:
+        plaintext = rsa.decrypt(message=ciphered, padding=rsa.PKCS7_PADDING)
+    except Exception as e:
+        print("Unable to decrypt the input buffer ({})".format(str(e)))
+        sys.exit(3)
+
     print("Plaintext", plaintext)
 
     # and compare
