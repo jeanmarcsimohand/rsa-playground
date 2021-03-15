@@ -1,3 +1,46 @@
+#!/bin/python3
+# coding: utf-8
+
+"""
+    RSA keygen / encryption / decryption python implementation
+
+    This piece of code has been written for educational purposes.
+
+    This implementation is SLOW and UNSECURE:
+
+            **DO NOT USE IT IN REAL PROJECTS**
+
+
+    This project is licensed under GPLv2, please refer to licence.md or
+    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+    Copyright (C) 2021 Jean-Marc Simohand <simohand@gmail.com>
+
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License
+    as published by the Free Software Foundation; either version 2
+    of the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+
+    Note to students:
+    -----------------
+
+    If you're a student and you want to re-use this piece of code, feel free!!
+    but keep in mind the following bullets:
+        * before re-using this in a lecture, read all links provided in comments
+        * ensure to well understand what this code does
+        * let me know if this was helpful or not
+"""
+
 import multiprocessing
 import random
 import math
@@ -12,9 +55,8 @@ class Rsa:
     def __init__(self, bits: int = 2 ** 64, public_exponent: int = 65537):
         self.modulus = 0
         self.bits = bits
-        self.d = 0
-        self.p = 0
-        self.q = 0
+        self.d = 0  # this is totally unsecure to store the private exponent in a class member
+                    # without encrypting it
         self.exponent = public_exponent
 
     @staticmethod
@@ -88,6 +130,8 @@ class Rsa:
             # pick a random number in 2^(bits - 1) and 2^(bits) - 1
             n = random.randrange(pow(2, self.bits - 1), pow(2, self.bits))
             if 0 == n & 1:
+                # if n is even, for sure it won't be a prime number !
+                # NOTE: we do not consider the number '2' as strong enough ;)
                 continue
 
             if self._miller_rabin_prime_test(n, k):
@@ -127,13 +171,20 @@ class Rsa:
         :return: padded buffer as bytes-buffer
         """
         block_size = int(self.bits // 8)
+
+        # compute the number of cryptographic blocks for this message
         blocks = math.ceil(len(message) / block_size)
+
+        # the pad value is the number of bytes to append to the message to reach the block size
         pad_value = int(blocks * block_size - len(message))
 
         if block_size > 256:
             raise ValueError("PKCS#7 padding is valid only for block length lesser than 256 bytes")
 
         if pad_value == 0:
+            # the message length is an entire number of blocks
+            # but to allow to decrypt, in this case, we add an extra block where
+            # each byte is set to the block size value
             pad_value = block_size
 
         if isinstance(message, str):
@@ -150,7 +201,10 @@ class Rsa:
         :return: padded buffer as bytes-buffer
         """
         block_size = int(self.bits // 8)
+
+        # compute the number of cryptographic blocks for this message
         blocks = math.ceil(len(message) / block_size)
+        # the pad value is the number of bytes to append to the message to reach the block size
         pad_length = int(blocks * block_size - len(message))
 
         if isinstance(message, bytes):
@@ -203,6 +257,7 @@ class Rsa:
         if len(message) % int(self.bits // 8) != 0:
             raise ValueError("message is not padded ?")
 
+        # remove tailing padding bytes
         return message.rstrip(b'\x00')
 
     def keygen(self):
@@ -283,7 +338,7 @@ class Rsa:
             elif isinstance(message, bytes) is False:
                 raise TypeError("Invalid message: must be string or bytes")
 
-        # for each block do:
+        # encrypt each block (ECB chaining):
         for start in range(0, len(message), block_size):
             # get message blocks of 'block_size' length
             message_block = message[start: start + block_size]
@@ -314,10 +369,10 @@ class Rsa:
         # use a formatter to store 2*n hex digits (n=block_size)
         block_format = '{{cipher:{hexlength:04d}X}}'.format(hexlength=block_size * 2)
 
-        # for each block do:
+        # decrypt each block do (ECB chaining):
         # note that we use block_size*2 as we expect the input to be
         # a Hex string, where 2 hex digits represent 1 byte
-        for start in range(0, len(message), block_size*2):
+        for start in range(0, len(message), block_size * 2):
             # get the current ciphered block
             ciphered_block = message[start: start + block_size * 2]
 
@@ -360,18 +415,21 @@ if __name__ == "__main__":
     print("Public Exponent {}".format(hex(exponent).upper()[2:]))
     print("Pub modulus {}".format(hex(modulus).upper()[2:]))
     print("Private Exponent: {}".format(hex(priv).upper()[2:]))
-    print("Block size: {} bytes".format(str(int(rsa.bits//8))))
+    print("Block size: {} bytes".format(str(int(rsa.bits // 8))))
 
-    test_text = b"abcdefghijklmnopqrstuvwxyz123456-abcdefghijklmnopqrstuvwxyz12345" +\
-                b"abcdefghijklmnopqrstuvwxyz123456-abcdefghijklmnopqrstuvwxyz12345" +\
-                b"abcdefghijklmnopqrstuvwxyz123456-abcdefghijklmnopqrstuvwxyz12345"
+    test_text = "abcdefghijklmnopqrstuvwxyz123456-abcdefghijklmnopqrstuvwxyz12345" + \
+                "abcdefghijklmnopqrstuvwxyz123456-abcdefghijklmnopqrstuvwxyz12345" + \
+                "abcdefghijklmnopqrstuvwxyz123456-abcdefghijklmnopqrstuvwxyz12345"
 
-    ciphered = rsa.encrypt(message=test_text, padding=rsa.NULL_PADDING)
+    # encrypt the message
+    ciphered = rsa.encrypt(message=test_text, padding=rsa.PKCS7_PADDING)
     print("Ciphered", hexlify(ciphered).decode().upper())
-    plaintext = rsa.decrypt(message=ciphered, padding=rsa.NULL_PADDING)
 
+    # decrypt the message
+    plaintext = rsa.decrypt(message=ciphered, padding=rsa.PKCS7_PADDING)
     print("Plaintext", plaintext)
 
+    # and compare
     if isinstance(test_text, str):
         plaintext = plaintext.decode()
 
